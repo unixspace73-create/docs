@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DiSa — Dintshang South Africa Radio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+
+<style>
+:root{
+ --bg:#0b1220;
+ --bg-soft:#121a2f;
+ --text:#eaeaf0;
+ --muted:#9aa4bf;
+ --accent:#ff7a18;
+ --accent-soft:rgba(255,122,24,.15);
+ --card:rgba(255,255,255,.08);
+ --border:rgba(255,255,255,.18);
+}
+
+body{
+ margin:0;
+ background:linear-gradient(160deg,var(--bg),#050914);
+ color:var(--text);
+ font-family:system-ui;
+ overflow:hidden;
+}
+
+.page{
+ position:absolute;
+ inset:0;
+ padding:18px;
+ overflow-y:auto;
+ opacity:0;
+ transform:translateY(20px);
+ transition:.35s;
+ pointer-events:none;
+}
+
+.page.active{
+ opacity:1;
+ transform:none;
+ pointer-events:auto;
+}
+
+h2,h3{margin-top:0}
+
+input,button{
+ width:100%;
+ padding:13px;
+ margin-bottom:12px;
+ border-radius:16px;
+ border:1px solid var(--border);
+ background:var(--card);
+ color:var(--text);
+}
+
+button{
+ background:var(--accent);
+ border:none;
+ font-weight:600;
+}
+
+.card{
+ background:var(--card);
+ border:1px solid var(--border);
+ padding:14px;
+ border-radius:18px;
+ margin-bottom:12px;
+}
+
+nav{
+ position:fixed;
+ bottom:0;
+ left:0;
+ right:0;
+ background:#020617;
+ display:flex;
+ justify-content:space-around;
+ padding:14px 0;
+}
+
+nav i{
+ font-size:22px;
+ color:var(--muted);
+}
+
+nav i.active{color:var(--accent)}
+</style>
+</head>
+
+<body>
+
+<div id="welcome" class="page active">
+ <h2>DiSa Radio</h2>
+ <p>Community powered radio</p>
+ <button onclick="openPage('auth')">Get Started</button>
+</div>
+
+<div id="auth" class="page">
+ <h2>Sign In</h2>
+ <input id="email" placeholder="Email">
+ <input id="password" placeholder="Password" type="password">
+ <button onclick="login()">Login</button>
+ <button onclick="register()">Register</button>
+ <button onclick="googleLogin()">Google</button>
+</div>
+
+<div id="radio" class="page">
+ <h3>Schedule</h3>
+ <div id="radioList"></div>
+
+ <div id="adminPanel" style="display:none">
+  <input id="radioTitle" placeholder="Show Title">
+  <input id="radioTime" placeholder="Show Time">
+  <button onclick="addRadio()">Add Show</button>
+ </div>
+
+ <h3>Live</h3>
+ <audio controls style="width:100%">
+  <source src="YOUR_STREAM_URL" type="audio/mpeg">
+ </audio>
+</div>
+
+<div id="profile" class="page">
+ <h3>Profile</h3>
+ <p id="profileInfo"></p>
+ <button onclick="logout()">Logout</button>
+</div>
+
+<nav>
+ <i class="bi bi-broadcast" onclick="go('radio')"></i>
+ <i class="bi bi-person" onclick="go('profile')"></i>
+</nav>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+firebase.initializeApp({
+ apiKey:"YOUR_KEY",
+ authDomain:"YOUR_DOMAIN",
+ projectId:"YOUR_ID"
+});
+
+const auth=firebase.auth();
+const db=firebase.firestore();
+
+function openPage(id){
+ document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+ document.getElementById(id).classList.add('active');
+}
+
+function go(p){
+ document.querySelectorAll('nav i').forEach(i=>i.classList.remove('active'));
+ openPage(p);
+}
+
+function register(){
+ auth.createUserWithEmailAndPassword(email.value,password.value)
+ .then(cred=>{
+  return db.collection("users").doc(cred.user.uid).set({
+   email:cred.user.email,
+   role:"admin",
+   createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  });
+ });
+}
+
+function login(){
+ auth.signInWithEmailAndPassword(email.value,password.value);
+}
+
+function googleLogin(){
+ auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+}
+
+function logout(){
+ auth.signOut();
+}
+
+auth.onAuthStateChanged(async u=>{
+ if(!u){openPage('welcome');return;}
+ openPage('radio');
+
+ const ref=db.collection("users").doc(u.uid);
+ const snap=await ref.get();
+ if(!snap.exists){
+  const count=(await db.collection("users").get()).size;
+  await ref.set({email:u.email,role:count===0?"admin":"user"});
+ }
+
+ const role=(await ref.get()).data().role;
+ document.getElementById("adminPanel").style.display=role==="admin"?"block":"none";
+ document.getElementById("profileInfo").innerText=`${u.email} (${role})`;
+ loadRadio();
+});
+
+function loadRadio(){
+ db.collection("radio").orderBy("createdAt","desc")
+ .onSnapshot(s=>{
+  radioList.innerHTML="";
+  s.forEach(d=>{
+   const r=d.data();
+   radioList.innerHTML+=`<div class="card">${r.time} — ${r.title}</div>`;
+  });
+ });
+}
+
+function addRadio(){
+ db.collection("radio").add({
+  title:radioTitle.value,
+  time:radioTime.value,
+  createdAt:firebase.firestore.FieldValue.serverTimestamp()
+ });
+ radioTitle.value="";
+ radioTime.value="";
+}
+</script>
+
+</body>
+</html>
